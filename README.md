@@ -7,6 +7,26 @@
 Например если на первом уровне разобъем задачу на 10 частей и каждую захотим решить с помощью Compute(), то у нас запустится 10 * ```hardware concurrency``` потоков.
 * Нельзя отменить вычисление, нельзя следить за прогрессом.
 
+# Пример использования
+```
+  class MyPrimeSplittingTask : public Task {
+      Params params_;
+  public:
+      MyPrimeSplittingTask(Params params) : params_(params) {}
+      bool is_prime = false;
+      virtual void Run() {
+          is_prime = check_is_prime(params_);
+      }
+  }
+
+  bool DoComputation(std::shared_ptr<Executor> pool, Params params) {
+      auto my_task = std::make_shared<MyPrimeSplittingTask>(params);
+      pool->Submit(my_task);
+      my_task.Wait();
+      return my_task->is_prime;
+  }
+```
+
 Использование Executors возлагает на полльзователя только разделение задачи на более мелкие подзадачи, немного подробнее:
 
 * ```Task``` - это какой-то кусок вычислений. Сам код вычисления находится в
