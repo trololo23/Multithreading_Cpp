@@ -9,10 +9,11 @@
 #include <optional>
 #include <atomic>
 
-////////////
+//////////////////////////////////////////////////////
 
 using TimePoint = std::chrono::system_clock::time_point;
 
+// Template UnboundedBlockingQueue
 template <typename T>
 class UnboundedBlockingQueue {
 public:
@@ -69,95 +70,31 @@ public:
 
     virtual void Run() = 0;
 
-    void Invoke() {
-        for (const auto& dep : dependences_) {
-            if (!dep->IsFinished()) {
-                return;
-            }
-        }
+    void Invoke();
 
-        if (!triggers_.empty()) {
-            bool any_triggered{false};
-            for (const auto& trig : triggers_) {
-                if (trig->IsFinished()) {
-                    any_triggered = true;
-                    break;
-                }
-            }
-            if (!any_triggered) {
-                return;
-            }
-        }
+    void AddDependency(std::shared_ptr<Task> dep);
 
-        if (std::chrono::system_clock::now() < ded_) {
-            return;
-        }
+    void AddTrigger(std::shared_ptr<Task> dep);
 
-        auto guard = std::lock_guard(doing_work_);
-        if (is_canceled_.load()) {
-            return;
-        }
-        try {
-            Run();
-        } catch (...) {
-            is_failed_.store(true);
-            is_finished_.store(true);
-            exc_ptr_ = std::current_exception();
-            task_done_.notify_all();
-            return;
-        }
-        is_completed_ = true;
-        is_finished_.store(true);
-        task_done_.notify_all();
-    }
-
-    void AddDependency(std::shared_ptr<Task> dep) {
-        dependences_.push_back(dep);
-    };
-
-    void AddTrigger(std::shared_ptr<Task> dep) {
-        triggers_.push_back(dep);
-    };
-
-    void SetTimeTrigger(std::chrono::system_clock::time_point at) {
-        ded_ = at;
-    };
+    void SetTimeTrigger(std::chrono::system_clock::time_point at);
 
     // Task::run() completed without throwing exception
-    bool IsCompleted() {
-        return is_completed_;
-    };
+    bool IsCompleted();
 
     // Task::run() throwed exception
-    bool IsFailed() {
-        return is_failed_.load();
-    };
+    bool IsFailed();
 
     // Task was Canceled
-    bool IsCanceled() {
-        return is_canceled_.load();
-    };
+    bool IsCanceled();
 
     // Task either completed, failed or was Canceled
-    bool IsFinished() {
-        return is_finished_.load();
-    };
+    bool IsFinished();
 
-    std::exception_ptr GetError() {
-        return exc_ptr_;
-    };
+    std::exception_ptr GetError();
 
-    void Cancel() {
-        is_canceled_.store(true);
-        is_finished_.store(true);
-    };
+    void Cancel();
 
-    void Wait() {
-        auto guard = std::unique_lock(doing_work_);
-        while (!is_finished_.load()) {
-            task_done_.wait(guard);
-        }
-    };
+    void Wait();
 
 private:
     std::atomic<bool> is_canceled_{false};
@@ -217,7 +154,10 @@ private:
 template <class T>
 using FuturePtr = std::shared_ptr<Future<T>>;
 
+// Void-like type
 struct Unit {};
+
+// Template Task sheduler
 class Executor {
 public:
     Executor(int num_threads) {
